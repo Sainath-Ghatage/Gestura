@@ -1,8 +1,6 @@
 // lib/screens/speech_to_text_screen.dart
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:file_picker/file_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class SpeechToTextScreen extends StatefulWidget {
@@ -20,19 +18,6 @@ class _SpeechToTextScreenState extends State<SpeechToTextScreen>
   bool _isListening = false;
   String _transcribedText = '';
   double _confidence = 0;
-
-  // ── File import state ─────────────────────────────────────────────────
-  bool _isProcessingFile = false;
-  String? _importedFileName;
-  String? _importedFilePath;
-  int? _importedFileSizeKb;
-  String? _importedFileExt;
-
-  // ── Processing stage label ────────────────────────────────────────────
-  String _processingStage = '';
-
-  // ── Demo note visibility ──────────────────────────────────────────────
-  bool _showDemoNote = false;
 
   @override
   void initState() {
@@ -94,8 +79,6 @@ class _SpeechToTextScreenState extends State<SpeechToTextScreen>
       _isListening = true;
       _transcribedText = '';
       _confidence = 0;
-      _importedFileName = null;
-      _showDemoNote = false;
     });
     await _speech.listen(
       onResult: (result) {
@@ -119,90 +102,9 @@ class _SpeechToTextScreenState extends State<SpeechToTextScreen>
     if (mounted) setState(() => _isListening = false);
   }
 
-  Future<void> _pickFile() async {
-    if (_isListening) await _stopListening();
-
-    FilePickerResult? result;
-    try {
-      result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: [
-          'mp3', 'wav', 'aac', 'm4a', 'ogg', 'flac',
-          'mp4', 'mkv', 'mov', 'avi', 'webm',
-        ],
-        allowMultiple: false,
-      );
-    } catch (e) {
-      _showSnack('Could not open file picker: $e');
-      return;
-    }
-
-    if (result == null || result.files.isEmpty) return;
-
-    final file = result.files.first;
-    final filePath = file.path;
-
-    // Read actual file size
-    int? sizeKb;
-    if (filePath != null) {
-      try {
-        final f = File(filePath);
-        final bytes = await f.length();
-        sizeKb = (bytes / 1024).round();
-      } catch (_) {}
-    }
-
-    final ext = file.extension?.toLowerCase() ?? '';
-    final isVideo = ['mp4', 'mkv', 'mov', 'avi', 'webm'].contains(ext);
-
-    setState(() {
-      _isProcessingFile = true;
-      _importedFileName = file.name;
-      _importedFilePath = filePath;
-      _importedFileSizeKb = sizeKb;
-      _importedFileExt = ext;
-      _transcribedText = '';
-      _confidence = 0;
-      _showDemoNote = false;
-      _processingStage = isVideo ? 'Extracting audio track…' : 'Reading audio file…';
-    });
-
-    // Stage 1 — simulate audio extraction (video only)
-    if (isVideo) {
-      await Future.delayed(const Duration(milliseconds: 900));
-      if (!mounted) return;
-      setState(() => _processingStage = 'Decoding audio stream…');
-      await Future.delayed(const Duration(milliseconds: 700));
-    }
-
-    // Stage 2 — simulate transcription
-    if (!mounted) return;
-    setState(() => _processingStage = 'Transcribing speech…');
-    await Future.delayed(const Duration(seconds: 1, milliseconds: 400));
-
-    // Stage 3 — produce demo result with honest labelling
-    if (!mounted) return;
-    setState(() {
-      _transcribedText =
-          '[Demo mode] On-device media transcription requires a bundled '
-          'ML model (e.g. Whisper.cpp / Vosk). '
-          'File loaded successfully: "${file.name}" '
-          '(${sizeKb != null ? "${sizeKb}KB" : "size unknown"}, .$ext). '
-          'Connect a transcription model here to get real output.';
-      _isProcessingFile = false;
-      _showDemoNote = true;
-      _confidence = 0;
-    });
-  }
-
   void _clearText() => setState(() {
         _transcribedText = '';
-        _importedFileName = null;
-        _importedFilePath = null;
-        _importedFileSizeKb = null;
-        _importedFileExt = null;
         _confidence = 0;
-        _showDemoNote = false;
       });
 
   void _showSnack(String msg) {
@@ -242,77 +144,6 @@ class _SpeechToTextScreenState extends State<SpeechToTextScreen>
             children: [
               const SizedBox(height: 14),
 
-              // ── Demo note banner ───────────────────────────────────
-              if (_showDemoNote)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: Colors.amber.withOpacity(0.4), width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline_rounded,
-                          color: Colors.amber, size: 20),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'File import is in demo mode. '
-                          'Integrate Whisper.cpp or Vosk for real transcription.',
-                          style: TextStyle(
-                              color: Colors.amber.shade200, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // ── File metadata chip (shown after picking) ───────────
-              if (_importedFileName != null && !_isProcessingFile)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: accent.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                        color: accent.withOpacity(0.25), width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _isVideoExt(_importedFileExt)
-                            ? Icons.videocam_rounded
-                            : Icons.audio_file_rounded,
-                        color: accent,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _importedFileName!,
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 13),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (_importedFileSizeKb != null)
-                        Text(
-                          _importedFileSizeKb! >= 1024
-                              ? '${(_importedFileSizeKb! / 1024).toStringAsFixed(1)} MB'
-                              : '${_importedFileSizeKb!} KB',
-                          style: TextStyle(
-                              color: accent.withOpacity(0.7), fontSize: 12),
-                        ),
-                    ],
-                  ),
-                ),
-
               // ── Transcription display box ──────────────────────────
               Expanded(
                 child: Container(
@@ -328,16 +159,14 @@ class _SpeechToTextScreenState extends State<SpeechToTextScreen>
                       width: _isListening ? 2.5 : 1.5,
                     ),
                   ),
-                  child: _isProcessingFile
-                      ? _buildProcessingView(theme)
-                      : _buildTranscriptionView(theme, accent),
+                  child: _buildTranscriptionView(theme, accent),
                 ),
               ),
 
               const SizedBox(height: 14),
 
               // ── Confidence bar ─────────────────────────────────────
-              if (_confidence > 0 && _transcribedText.isNotEmpty && !_showDemoNote)
+              if (_confidence > 0 && _transcribedText.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Row(
@@ -411,47 +240,10 @@ class _SpeechToTextScreenState extends State<SpeechToTextScreen>
               ),
 
               const SizedBox(height: 16),
-
-              // ── Import button ─────────────────────────────────────
-              OutlinedButton.icon(
-                onPressed: _isProcessingFile ? null : _pickFile,
-                icon: const Icon(Icons.upload_file_rounded, size: 24),
-                label: const Text('Import Audio / Video File'),
-              ),
-
-              const SizedBox(height: 18),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  bool _isVideoExt(String? ext) =>
-      ['mp4', 'mkv', 'mov', 'avi', 'webm'].contains(ext);
-
-  Widget _buildProcessingView(ThemeData theme) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const CircularProgressIndicator(),
-        const SizedBox(height: 22),
-        Text(
-          _processingStage,
-          style: theme.textTheme.titleLarge?.copyWith(fontSize: 20),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 10),
-        if (_importedFileName != null)
-          Text(
-            _importedFileName!,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurface.withOpacity(0.5),
-            ),
-            textAlign: TextAlign.center,
-            overflow: TextOverflow.ellipsis,
-          ),
-      ],
     );
   }
 
@@ -465,7 +257,7 @@ class _SpeechToTextScreenState extends State<SpeechToTextScreen>
           const SizedBox(height: 14),
           Text(
             _speechAvailable
-                ? 'Tap the mic to start speaking\nor import an audio/video file'
+                ? 'Tap the mic to start speaking'
                 : 'Initialising speech engine…',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodyLarge?.copyWith(
@@ -483,11 +275,8 @@ class _SpeechToTextScreenState extends State<SpeechToTextScreen>
         style: theme.textTheme.bodyLarge?.copyWith(
           fontSize: 22,
           height: 1.65,
-          color: _showDemoNote
-              ? theme.colorScheme.onSurface.withOpacity(0.55)
-              : Colors.white,
-          fontStyle:
-              _showDemoNote ? FontStyle.italic : FontStyle.normal,
+          color: Colors.white,
+          fontStyle: FontStyle.normal,
         ),
       ),
     );
