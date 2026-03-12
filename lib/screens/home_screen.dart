@@ -92,7 +92,7 @@ class HomeScreen extends StatelessWidget {
                         _FeatureTile(
                           route: '/quick',
                           icon: Icons.chat_bubble_rounded,
-                          label: 'Quick\nSigns',
+                          label: 'Quick\nMessages',
                           subtitle: 'Tap to speak phrases',
                           color: Color(0xFFFF6D00),
                         ),
@@ -186,8 +186,7 @@ class _FeatureTile extends StatelessWidget {
                         border: Border.all(
                             color: color.withOpacity(0.35), width: 1.5),
                       ),
-                      child: Icon(icon,
-                          color: color, size: iconBox * 0.52),
+                      child: Icon(icon, color: color, size: iconBox * 0.52),
                     ),
 
                     const Spacer(),
@@ -210,8 +209,7 @@ class _FeatureTile extends StatelessWidget {
                       subtitle,
                       style: TextStyle(
                         fontSize: subFs,
-                        color:
-                            theme.colorScheme.onSurface.withOpacity(0.5),
+                        color: theme.colorScheme.onSurface.withOpacity(0.5),
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

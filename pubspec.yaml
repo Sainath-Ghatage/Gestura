@@ -31,6 +31,9 @@ dependencies:
   # On-device TFLite inference for ASL sign detection
   tflite_flutter: ^0.11.0
 
+  # Image processing to convert camera frames for the model
+  image: ^4.1.7
+
   # Icons
   cupertino_icons: ^1.0.6
 

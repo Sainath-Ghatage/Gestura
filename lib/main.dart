@@ -6,7 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'screens/home_screen.dart';
 import 'screens/speech_to_text_screen.dart';
 import 'screens/text_to_speech_screen.dart';
-import 'screens/sign_to_text_screen.dart';
+import 'screens/sign_to_text_screen.dart' as sign;
 import 'screens/quick_signs_screen.dart';
 
 Future<void> main() async {
@@ -57,7 +57,7 @@ class GesturaApp extends StatelessWidget {
         '/': (_) => const HomeScreen(),
         '/stt': (_) => const SpeechToTextScreen(),
         '/tts': (_) => const TextToSpeechScreen(),
-        '/sign': (_) => const SignToTextScreen(),
+        '/sign': (_) => const sign.SignToTextScreen(),
         '/quick': (_) => const QuickSignsScreen(),
       },
     );
