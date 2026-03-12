@@ -1,16 +1,17 @@
-# Gestura
+# signbridge
 
-**Theme 5: AI for Accessibility, Healthcare & Well-Being** *A real-time sign language and speech-to-text translation app for seamless accessibility.*
+A new Flutter project.
 
----
+## Getting Started
 
-## 📖 Project Overview
-This application bridges the communication gap between deaf and hearing individuals. It operates natively on mobile devices to provide real-time, two-way translation: converting spoken words into highly readable text, and capturing sign language gestures to translate them into text and synthesized speech.
+This project is a starting point for a Flutter application.
 
-## ✨ Key Functionalities
-* **Real-Time Speech-to-Text:** Captures continuous audio and transcribes it instantly into a high-contrast, large-font UI for easy reading.
-* **Sign-to-Text/Speech:** Utilizes on-device camera tracking to recognize sign language gestures, converting them to text and reading them aloud.
-* **Offline-First & Privacy Focused:** By utilizing native on-device APIs, the core transcription features do not require cloud processing, ensuring user privacy and usability in low-connectivity areas.
+A few resources to get you started if this is your first Flutter project:
 
----
+- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
+- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
 
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.
