@@ -1,4 +1,3 @@
-// lib/screens/quick_signs_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_tts/flutter_tts.dart';

@@ -55,7 +55,7 @@ class HomeScreen extends StatelessWidget {
               const SizedBox(height: 12),
 
               // ── Grid ─────────────────────────────────────────────
-              // LayoutBuilder computes exact card ratio at runtime → no overflow
+              
               Expanded(
                 child: LayoutBuilder(
                   builder: (context, constraints) {

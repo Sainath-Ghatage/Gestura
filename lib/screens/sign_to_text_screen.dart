@@ -1,27 +1,19 @@
-// lib/screens/sign_to_text_screen.dart
-// Inference backend: image package (YUV→RGB) + tflite_flutter nested-list output.
-
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:image/image.dart' as img;
 import 'package:tflite_flutter/tflite_flutter.dart';
-
-// ── Labels (must match the model's output order) ─────────────────────────────
-const List<String> _kLabels = [
-  'A','B','C','D','E','F','G','H','I','J',
-  'K','L','M','N','O','P','Q','R','S','T',
-  'U','V','W','X','Y','Z','del','nothing','space',
-];
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const int    _kSize       = 224;          // model input WxH
 const int    _kEveryN     = 6;            // infer every N frames
-const double _kThreshold  = 0.05;         // 5% confidence minimum
+const double _kThreshold  = 0.60;         // Minimum confidence
 const int    _kHoldFrames = 15;           // frames to hold before confirming
-const String _kAsset      = 'assets/models/asl_alphabet.tflite';
+const String _kAsset      = 'assets/models/model_unquant.tflite';
+const String _kLabelsFile = 'assets/models/labels.txt';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -41,8 +33,9 @@ class _SignToTextScreenState extends State<SignToTextScreen>
   bool _isFront  = true;
   String _camErr  = '';
 
-  // Model state
+  // Model & Labels state
   Interpreter? _interp;
+  List<String> _labels = [];
   bool _modelReady   = false;
   bool _modelLoading = true;
   String _modelErr   = '';
@@ -65,16 +58,19 @@ class _SignToTextScreenState extends State<SignToTextScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _loadModel();
-    _initCamera();
+    _initSystem();
+  }
+
+  Future<void> _initSystem() async {
+    await _loadLabels();
+    await _loadModel();
+    await _initCamera();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopAndDisposeCamera();
-    // Null FIRST so the post-await guard in _runInference sees null and exits
-    // before we call interp.run() on the now-closed native interpreter.
     final i = _interp;
     _interp = null;
     i?.close();
@@ -87,7 +83,24 @@ class _SignToTextScreenState extends State<SignToTextScreen>
     if (s == AppLifecycleState.resumed)  _initCamera();
   }
 
-  // ── Model ───────────────────────────────────────────────────────────────────
+  // ── Model & Labels ──────────────────────────────────────────────────────────
+
+  Future<void> _loadLabels() async {
+    try {
+      final labelsData = await rootBundle.loadString(_kLabelsFile);
+      // Split by line, trim whitespace, remove empty lines
+      List<String> rawLabels = labelsData.split('\n')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      
+      // Teachable Machine labels usually look like "0 ClassName". Strip the number.
+      _labels = rawLabels.map((s) => s.replaceFirst(RegExp(r'^\d+\s+'), '')).toList();
+      _dbg('Loaded ${_labels.length} labels');
+    } catch (e) {
+      _dbg('Failed to load labels.txt: $e');
+    }
+  }
 
   Future<void> _loadModel() async {
     if (mounted) setState(() { _modelLoading = true; _modelErr  = ''; });
@@ -97,21 +110,14 @@ class _SignToTextScreenState extends State<SignToTextScreen>
       final opts = InterpreterOptions()..threads = 2;
       final interp = await Interpreter.fromAsset(_kAsset, options: opts);
 
-      // Log input / output shapes for diagnosis
-      final inShape  = interp.getInputTensor(0).shape;
-      final outShape = interp.getOutputTensor(0).shape;
-      _dbg('Model OK  in:$inShape  out:$outShape');
-
       if (mounted) setState(() {
         _interp      = interp;
         _modelReady  = true;
         _modelLoading = false;
-        _debugMsg    = 'Model loaded ✓  Starting camera stream…';
+        _debugMsg    = 'Model loaded ✓  Starting camera…';
       });
 
-      // Race-condition fix: if camera already ready, start stream now
       if (_camReady && _ctrl != null) _startStream();
-
     } catch (e) {
       _dbg('Model load FAILED: $e');
       if (mounted) setState(() {
@@ -147,12 +153,8 @@ class _SignToTextScreenState extends State<SignToTextScreen>
     }
 
     final desc = _isFront
-        ? _cameras.firstWhere(
-            (c) => c.lensDirection == CameraLensDirection.front,
-            orElse: () => _cameras.first)
-        : _cameras.firstWhere(
-            (c) => c.lensDirection == CameraLensDirection.back,
-            orElse: () => _cameras.first);
+        ? _cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.front, orElse: () => _cameras.first)
+        : _cameras.firstWhere((c) => c.lensDirection == CameraLensDirection.back, orElse: () => _cameras.first);
 
     final ctrl = CameraController(
       desc,
@@ -199,22 +201,39 @@ class _SignToTextScreenState extends State<SignToTextScreen>
 
   void _runInference(CameraImage cameraFrame) {
     final interp = _interp;
-    if (interp == null) return;
+    if (interp == null || _labels.isEmpty) return;
     _inferring = true;
 
     try {
       // 1. YUV420 → img.Image
-      final rgbImage = _convertYUV420(cameraFrame);
+      img.Image rgbImage = _convertYUV420(cameraFrame);
 
-      // 2. Resize to model input size
+      // 2. Rotate & Mirror (Critical for Teachable Machine models)
+      rgbImage = img.copyRotate(rgbImage, angle: 90);
+      if (_isFront) {
+        rgbImage = img.flipHorizontal(rgbImage);
+      }
+
+      // 3. Resize
       final resized = img.copyResize(rgbImage, width: _kSize, height: _kSize);
 
-      // 3. Normalise to [-1, 1] (MobileNetV2)
-      final flat = _toFloat32(resized);
+      // 4. Create precise 4D nested list [1, 224, 224, 3] expected by TFLite
+      final input = List.generate(1, (_) =>
+        List.generate(_kSize, (y) =>
+          List.generate(_kSize, (x) {
+            final p = resized.getPixelSafe(x, y);
+            return [
+              (p.r / 127.5) - 1.0,
+              (p.g / 127.5) - 1.0,
+              (p.b / 127.5) - 1.0
+            ];
+          })
+        )
+      );
 
-      // 4. Run – nested-list output is reliably filled by tflite_flutter
-      final output = List.generate(1, (_) => List<double>.filled(_kLabels.length, 0.0));
-      interp.run(flat, output);
+      // 5. Run Inference dynamically scaled to label count
+      final output = List.generate(1, (_) => List<double>.filled(_labels.length, 0.0));
+      interp.run(input, output);
 
       final scores = output[0];
 
@@ -225,27 +244,26 @@ class _SignToTextScreenState extends State<SignToTextScreen>
         if (scores[i] > maxVal) { maxVal = scores[i]; maxIdx = i; }
       }
 
-      final topLabel = _kLabels[maxIdx];
+      final topLabel = _labels[maxIdx];
       final topConf  = maxVal;
 
       if (_frameCount % 30 == 0) {
-        debugPrint('▶ $topLabel ${(topConf*100).toStringAsFixed(1)}%  '
-            'scores[0..4]: ${scores.take(5).map((s)=>s.toStringAsFixed(3)).join(", ")}');
+        debugPrint('▶ $topLabel ${(topConf*100).toStringAsFixed(1)}%');
       }
 
       if (mounted) setState(() {
         _debugMsg = '$topLabel  ${(topConf * 100).toStringAsFixed(1)}%';
 
-        if (topConf >= _kThreshold && topLabel != 'nothing') {
+        if (topConf >= _kThreshold && topLabel.toLowerCase() != 'nothing' && topLabel.toLowerCase() != 'background') {
           _label      = topLabel;
           _confidence = topConf;
 
           if (topLabel == _lastLabel) {
             _holdCount++;
             if (_holdCount == _kHoldFrames) {
-              if (topLabel == 'space') {
+              if (topLabel.toLowerCase() == 'space') {
                 _word += ' ';
-              } else if (topLabel == 'del') {
+              } else if (topLabel.toLowerCase() == 'del') {
                 if (_word.isNotEmpty) _word = _word.substring(0, _word.length - 1);
               } else {
                 _word += topLabel;
@@ -270,7 +288,7 @@ class _SignToTextScreenState extends State<SignToTextScreen>
     }
   }
 
-  // ── Image helpers (run on Dart event loop, same thread as Flutter) ───────────
+  // ── Image helpers ────────────────────────────────────────────────────────────
 
   img.Image _convertYUV420(CameraImage c) {
     final w = c.width, h = c.height;
@@ -296,22 +314,6 @@ class _SignToTextScreenState extends State<SignToTextScreen>
     }
     return out;
   }
-
-  Float32List _toFloat32(img.Image image) {
-    final buf = Float32List(_kSize * _kSize * 3);
-    int i = 0;
-    for (int y = 0; y < _kSize; y++) {
-      for (int x = 0; x < _kSize; x++) {
-        final p = image.getPixelSafe(x, y);
-        buf[i++] = (p.r / 127.5) - 1.0;
-        buf[i++] = (p.g / 127.5) - 1.0;
-        buf[i++] = (p.b / 127.5) - 1.0;
-      }
-    }
-    return buf;
-  }
-
-
 
   // ── Debug helper ─────────────────────────────────────────────────────────────
 
@@ -381,7 +383,6 @@ class _SignToTextScreenState extends State<SignToTextScreen>
   );
 
   Widget _buildCameraView() {
-    const green = Color(0xFF69FF47);
     return Stack(fit: StackFit.expand, children: [
 
       // Camera preview
@@ -452,8 +453,6 @@ class _SignToTextScreenState extends State<SignToTextScreen>
     ]);
   }
 }
-
-
 
 // ── Helper widgets ────────────────────────────────────────────────────────────
 
@@ -565,8 +564,9 @@ class _ModelMissingCard extends StatelessWidget {
         ],
         const SizedBox(height: 8),
         const Text(
-          'Make sure assets/models/asl_alphabet.tflite exists\n'
-          'and is listed under flutter › assets in pubspec.yaml.',
+          'Ensure model_unquant.tflite and labels.txt\n'
+          'are inside gestura/assets/models/ directory\n'
+          'and listed under flutter › assets in pubspec.yaml.',
           style: TextStyle(color: Colors.white60, fontSize: 12, height: 1.6),
         ),
       ]),

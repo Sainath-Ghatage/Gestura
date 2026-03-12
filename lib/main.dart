@@ -1,4 +1,3 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -29,10 +28,10 @@ Future<void> _requestPermissions() async {
     Permission.microphone,
     Permission.camera,
     Permission.storage,
-    Permission.audio,        // Android 13+ READ_MEDIA_AUDIO
-    Permission.videos,       // Android 13+ READ_MEDIA_VIDEO
-    Permission.photos,       // Android 13+ READ_MEDIA_IMAGES
-    Permission.manageExternalStorage, // gracefully denied on most devices – that's fine
+    Permission.audio, 
+    Permission.videos,
+    Permission.photos,
+    Permission.manageExternalStorage, 
   ].request();
 
   debugPrint('Permission results: $statuses');
@@ -64,9 +63,9 @@ class GesturaApp extends StatelessWidget {
   }
 
   ThemeData _buildDarkTheme() {
-    const Color primary = Color(0xFF00E5FF);   // bright cyan
-    const Color secondary = Color(0xFFFFD600); // vivid amber
-    const Color bg = Color(0xFF0A0A0A);         // near-black
+    const Color primary = Color(0xFF00E5FF);   
+    const Color secondary = Color(0xFFFFD600); 
+    const Color bg = Color(0xFF0A0A0A);        
     const Color surface = Color(0xFF1A1A1A);
     const Color onSurface = Color(0xFFF5F5F5);
 
