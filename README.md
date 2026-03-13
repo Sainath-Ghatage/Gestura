@@ -19,7 +19,7 @@ This section outlines the core capabilities of the system:
 An overview of the project architecture.
 
 ### Activity Diagram
-![Gestura Activity Diagram](images/ActivityAiagram.jpg)
+![Gestura Activity Diagram](images/ActivityDiagram.jpg)
 
 
 ## 🚀 Setup and Installation Guide
