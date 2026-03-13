@@ -1,8 +1,8 @@
-# Gestura 🤟
+    # Gestura 🤟
 
-> Breaking communication barriers with real-time sign language translation.
+    > Breaking communication barriers with real-time sign language translation.
 
-Gestura is a mobile application that facilitates seamless, two-way communication by translating sign language to text/speech, and speech/text back to sign language in real-time.
+    Gestura is a mobile application that facilitates seamless, two-way communication by translating sign language to text/speech, and speech/text back to sign language in real-time.
 
     ## ✨ Key Functionalities
     This section outlines the core capabilities of the system:
