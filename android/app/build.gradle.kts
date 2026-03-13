@@ -1,7 +1,7 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // MUST BE UNCOMMENTED - This is the only place it should live!
+    
     id("dev.flutter.flutter-gradle-plugin")
 }
 
